@@ -13,7 +13,7 @@ from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
 # Set the path to the comments file
-fileOrFolderPath = r"/Users/hugh/Documents/GitHub/arctic_shift/reddit/comments/RC_2024-04.zst"
+fileOrFolderPath = os.path.join(os.path.dirname(__file__), '..', 'reddit', 'comments')
 
 def flatten_dict(d, parent_key='', sep='_'):
     items = []

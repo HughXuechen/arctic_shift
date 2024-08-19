@@ -13,7 +13,7 @@ from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
 # check submissions or comments
-fileOrFolderPath = r"/Users/hugh/Documents/GitHub/arctic_shift/reddit/submissions/RS_2024-04.zst"
+fileOrFolderPath = os.path.join(os.path.dirname(__file__), '..', 'reddit', 'submissions')
 recursive = False
 
 def processFile(path: str):
