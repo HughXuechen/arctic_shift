@@ -44,14 +44,19 @@ def processFile(path: str):
         first_columns = ['created_date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio','author_fullname''permalink']
         
         # Get the first row from AIDungeon subreddit to determine columns
-        first_row = next((row for row in jsonStream if row.get('subreddit') == 'AIDungeon'), None)
+        first_row = None
+        for row in jsonStream:
+            if row.get('subreddit') == 'AIDungeon':
+                first_row = row
+                break
+        
         if first_row is None:
             print("No data found for AIDungeon subreddit in the file.")
             return
         
         # Flatten the first row and add created_date
         flat_first_row = flatten_dict(first_row)
-        created_timestamp = int(flat_first_row['created'])
+        created_timestamp = int(flat_first_row.get('created_utc', flat_first_row.get('created', 0)))
         created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
         flat_first_row['created_date'] = created_date
         
@@ -72,21 +77,25 @@ def processFile(path: str):
         with tqdm(total=file_size, unit='B', unit_scale=True, desc="Processing") as pbar:
             pbar.update(f.tell())
             for row in jsonStream:
-                progressLog.onRow()
-                pbar.update(f.tell() - pbar.n)
-                
-                # Only process rows from the AIDungeon subreddit
-                if row.get('subreddit') == 'AIDungeon':
-                    # Flatten the row and add created_date
-                    flat_row = flatten_dict(row)
-                    created_timestamp = int(flat_row['created'])
-                    created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
-                    flat_row['created_date'] = created_date
+                try:
+                    progressLog.onRow()
+                    pbar.update(f.tell() - pbar.n)
                     
-                    # Write to CSV
-                    csv_writer.writerow(flat_row)
-                    processed_rows += 1
-                
+                    # Only process rows from the AIDungeon subreddit
+                    if row.get('subreddit') == 'AIDungeon':
+                        # Flatten the row and add created_date
+                        flat_row = flatten_dict(row)
+                        created_timestamp = int(flat_row.get('created_utc', flat_row.get('created', 0)))
+                        created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
+                        flat_row['created_date'] = created_date
+                        
+                        # Write to CSV
+                        csv_writer.writerow(flat_row)
+                        processed_rows += 1
+                except Exception as e:
+                    print(f"Error processing row: {e}")
+                    continue
+        
         progressLog.logProgress("\n")
     
     print(f"AIDungeon submissions ({processed_rows} rows) saved to {output_file}")

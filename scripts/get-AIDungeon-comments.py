@@ -8,6 +8,7 @@ from tqdm import tqdm
 import json
 import csv
 from datetime import datetime
+import glob
 
 from fileStreams import getFileJsonStream
 from utils import FileProgressLog
@@ -32,7 +33,7 @@ def processFile(path: str):
     
     # Extract date from filename
     filename = os.path.basename(path)
-    date_str = filename.split('_')[1].split('.')[0]
+    date_str = filename.split('_')[1].split('.')[0] if '_' in filename else 'unknown_date'
     
     # Create output CSV file
     output_file = f"results/AIDungeon_comments_{date_str}.csv"
@@ -104,7 +105,15 @@ def processFile(path: str):
     print(f"Processed {aidungeon_count} comments from AIDungeon subreddit")
 
 def main():
-    processFile(fileOrFolderPath)
+    if os.path.isdir(fileOrFolderPath):
+        # If it's a directory, process all .zst files in it
+        for file_path in glob.glob(os.path.join(fileOrFolderPath, '*.zst')):
+            processFile(file_path)
+    elif os.path.isfile(fileOrFolderPath):
+        # If it's a file, process it directly
+        processFile(fileOrFolderPath)
+    else:
+        print(f"Error: {fileOrFolderPath} is neither a file nor a directory")
     print("Done :>")
 
 if __name__ == "__main__":
