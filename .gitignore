@@ -4,3 +4,5 @@
 *.pyc
 
 schemas_raw
+
+reddit/
