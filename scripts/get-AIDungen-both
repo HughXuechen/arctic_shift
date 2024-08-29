@@ -13,8 +13,9 @@ import glob
 from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
-# Set the path to the comments file
-fileOrFolderPath = '/Volumes/T7 Shield/reddit/comments/'
+# Set the path to the comments and submissions files
+commentsPath = '/Volumes/T7 Shield/reddit/comments/'
+submissionsPath = '/Volumes/T7 Shield/reddit/submissions/'
 
 def flatten_dict(d, parent_key='', sep='_'):
     items = []
@@ -28,7 +29,7 @@ def flatten_dict(d, parent_key='', sep='_'):
             items.append((new_key, v))
     return dict(items)
 
-def processFile(path: str):
+def processFile(path: str, is_comment: bool):
     print(f"Processing file {path}")
     
     # Extract date from filename
@@ -36,10 +37,12 @@ def processFile(path: str):
     date_str = filename.split('_')[1].split('.')[0] if '_' in filename else 'unknown_date'
     
     # Create output CSV file
-    output_file = f"results/AIDungeon_comments_{date_str}.csv"
+    output_file = f"results/AIDungeon_{'comments' if is_comment else 'submissions'}_{date_str}.csv"
     
     # Define the order of important columns
     important_columns = ["created-date", "author", "author_fullname", "body", "id", "link_id", "name", "parent_id", "permalink", "score", "ups"]
+    if not is_comment:
+        important_columns = ['created_date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio', 'author_fullname', 'permalink']
     
     with open(path, "rb") as f, open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         jsonStream = getFileJsonStream(path, f)
@@ -66,7 +69,7 @@ def processFile(path: str):
                 progressLog.onRow()
                 pbar.update(f.tell() - pbar.n)
                 
-                # Check if the comment is from the AIDungeon subreddit
+                # Check if the comment or submission is from the AIDungeon subreddit
                 if row.get('subreddit') == 'AIDungeon':
                     # Flatten the row
                     flat_row = flatten_dict(row)
@@ -97,23 +100,33 @@ def processFile(path: str):
                     aidungeon_count += 1
                     
                     if aidungeon_count % 1000 == 0:
-                        print(f"Processed {aidungeon_count} AIDungeon comments")
+                        print(f"Processed {aidungeon_count} AIDungeon {'comments' if is_comment else 'submissions'}")
         
         progressLog.logProgress("\n")
     
     print(f"CSV file created: {output_file}")
-    print(f"Processed {aidungeon_count} comments from AIDungeon subreddit")
+    print(f"Processed {aidungeon_count} {'comments' if is_comment else 'submissions'} from AIDungeon subreddit")
+
+def processFolder(path: str, is_comment: bool):
+    fileIterator: Iterable[str]
+    fileIterator = os.listdir(path)
+    fileIterator = (os.path.join(path, file) for file in fileIterator)
+    
+    for i, file in enumerate(fileIterator):
+        print(f"Processing file {i+1: 3} {file}")
+        processFile(file, is_comment)
 
 def main():
-    if os.path.isdir(fileOrFolderPath):
-        # If it's a directory, process all .zst files in it
-        for file_path in glob.glob(os.path.join(fileOrFolderPath, '*.zst')):
-            processFile(file_path)
-    elif os.path.isfile(fileOrFolderPath):
-        # If it's a file, process it directly
-        processFile(fileOrFolderPath)
+    if os.path.isdir(commentsPath):
+        processFolder(commentsPath, is_comment=True)
     else:
-        print(f"Error: {fileOrFolderPath} is neither a file nor a directory")
+        processFile(commentsPath, is_comment=True)
+    
+    if os.path.isdir(submissionsPath):
+        processFolder(submissionsPath, is_comment=False)
+    else:
+        processFile(submissionsPath, is_comment=False)
+    
     print("Done :>")
 
 if __name__ == "__main__":
