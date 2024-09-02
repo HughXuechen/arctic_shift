@@ -42,7 +42,7 @@ def processFile(path: str, is_comment: bool):
     # Define the order of important columns
     important_columns = ["created-date", "author", "author_fullname", "body", "id", "link_id", "name", "parent_id", "permalink", "score", "ups"]
     if not is_comment:
-        important_columns = ['created-date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio', 'author_fullname', 'permalink']
+        important_columns = ['created_date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio', 'author_fullname', 'permalink']
     
     with open(path, "rb") as f, open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         jsonStream = getFileJsonStream(path, f)
