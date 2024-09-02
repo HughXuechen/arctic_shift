@@ -41,7 +41,7 @@ def processFile(path: str):
         progressLog = FileProgressLog(path, f)
         
         # Define the order of the first columns
-        first_columns = ['created_date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio','author_fullname''permalink']
+        first_columns = ['created-date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio','author_fullname''permalink']
         
         # Get the first row from AIDungeon subreddit to determine columns
         first_row = None
@@ -54,11 +54,11 @@ def processFile(path: str):
             print("No data found for AIDungeon subreddit in the file.")
             return
         
-        # Flatten the first row and add created_date
+        # Flatten the first row and add created-date
         flat_first_row = flatten_dict(first_row)
         created_timestamp = int(flat_first_row.get('created_utc', flat_first_row.get('created', 0)))
-        created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
-        flat_first_row['created_date'] = created_date
+        created-date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
+        flat_first_row['created-date'] = created-date
         
         # Prepare the column order
         columns = first_columns + [col for col in flat_first_row.keys() if col not in first_columns]
@@ -83,11 +83,11 @@ def processFile(path: str):
                     
                     # Only process rows from the AIDungeon subreddit
                     if row.get('subreddit') == 'AIDungeon':
-                        # Flatten the row and add created_date
+                        # Flatten the row and add created-date
                         flat_row = flatten_dict(row)
                         created_timestamp = int(flat_row.get('created_utc', flat_row.get('created', 0)))
-                        created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
-                        flat_row['created_date'] = created_date
+                        created-date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
+                        flat_row['created-date'] = created-date
                         
                         # Write to CSV
                         csv_writer.writerow(flat_row)
