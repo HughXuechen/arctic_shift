@@ -1,7 +1,4 @@
 import sys
-version = sys.version_info
-if version.major < 3 or (version.major == 3 and version.minor < 10):
-    raise RuntimeError("This script requires Python 3.10 or higher")
 import os
 from typing import Iterable
 from tqdm import tqdm
@@ -9,114 +6,124 @@ import json
 import csv
 from datetime import datetime
 import glob
+import base64
 
 from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
-# Set the path to the comments and submissions files
-commentsPath = '/Volumes/T7 Shield/reddit/comments/'
-submissionsPath = '/Volumes/T7 Shield/reddit/submissions/'
+# Check Python version
+if sys.version_info < (3, 10):
+    raise RuntimeError("This script requires Python 3.10 or higher")
 
-def get_all_fieldnames(jsonStream):
-    fieldnames = set()
-    for row in jsonStream:
-        flat_row = flatten_dict(row)
-        fieldnames.update(flat_row.keys())
-    return fieldnames
+# Set the paths for comments and submissions
+COMMENTS_PATH = 'E:/reddit/comments/'
+SUBMISSIONS_PATH = 'E:/reddit/submissions/'
 
-def processFile(path: str, is_comment: bool):
-    print(f"Processing file {path}")
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            items.append((new_key, json.dumps(v, ensure_ascii=False)))
+        elif isinstance(v, str) and len(v) > 32000:  # Encode long strings
+            items.append((new_key, base64.b64encode(v.encode('utf-8')).decode('ascii')))
+        else:
+            items.append((new_key, str(v)))
+    return dict(items)
+
+def process_file(path: str, data_type: str):
+    print(f"Processing {data_type} file: {path}")
     
     # Extract date from filename
     filename = os.path.basename(path)
-    date_str = filename.split('_')[1].split('.')[0] if '_' in filename else 'unknown_date'
+    date_str = filename.split('_')[1].split('.')[0]
     
     # Create output CSV file
-    output_file = f"results/AIDungeon_{'comments' if is_comment else 'submissions'}_{date_str}.csv"
+    output_file = f"results/AIDungeon_{data_type}_{date_str}.csv"
+    os.makedirs("results", exist_ok=True)
     
-    # Define the order of important columns
-    important_columns = ["created-date", "author", "author-fullname", "body", "id", "link-id", "name", "parent-id", "permalink", "score", "ups"]
-    if not is_comment:
-        important_columns = ['created-date', 'name', 'title', 'selftext', 'ups', 'upvote-ratio', 'author-fullname', 'permalink']
-    
-    with open(path, "rb") as f:
-        jsonStream = getFileJsonStream(path, f)
-        if jsonStream is None:
-            print(f"Skipping unknown file {path}")
-            return
-        
-        # Get all fieldnames
-        fieldnames = get_all_fieldnames(jsonStream)
-        final_fieldnames = [col for col in important_columns if col in fieldnames]
-        final_fieldnames.extend(sorted(fieldnames - set(important_columns)))
-        
-        # Reset file pointer
-        f.seek(0)
-        jsonStream = getFileJsonStream(path, f)
-        
-        with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-            csv_writer = csv.DictWriter(csvfile, fieldnames=final_fieldnames)
-            csv_writer.writeheader()
+    try:
+        with open(path, "rb") as f, open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
+            jsonStream = getFileJsonStream(path, f)
+            if jsonStream is None:
+                print(f"Skipping unknown file {path}")
+                return
             
-            # Get total file size for progress bar
             f.seek(0, 2)
             file_size = f.tell()
             f.seek(0)
             
             progressLog = FileProgressLog(path, f)
             
-            # Initialize tqdm progress bar
+            fieldnames = []
+            csv_writer = None
+            processed_rows = 0
+
             with tqdm(total=file_size, unit='B', unit_scale=True, desc="Processing") as pbar:
                 pbar.update(f.tell())
-                aidungeon_count = 0
                 for row in jsonStream:
                     progressLog.onRow()
                     pbar.update(f.tell() - pbar.n)
                     
-                    # Check if the comment or submission is from the AIDungeon subreddit
                     if row.get('subreddit') == 'AIDungeon':
-                        # Flatten the row
                         flat_row = flatten_dict(row)
+                        created_timestamp = flat_row.get('created_utc')
+                        if created_timestamp:
+                            created_date = datetime.fromtimestamp(float(created_timestamp)).strftime('%Y-%m-%d-%H%M%S')
+                            flat_row['created_date'] = created_date
                         
-                        # Convert 'created' to 'created-date'
-                        if 'created' in flat_row:
-                            created_timestamp = int(flat_row['created'])
-                            created_date = datetime.utcfromtimestamp(created_timestamp).strftime('%Y%m%d-%H%M%S')
-                            flat_row['created-date'] = created_date
+                        new_fields = set(flat_row.keys()) - set(fieldnames)
+                        if new_fields:
+                            fieldnames.extend(sorted(new_fields))
+                            
+                            csv_writer = csv.DictWriter(csvfile, fieldnames=fieldnames, escapechar='\\', quoting=csv.QUOTE_ALL)
+                            if processed_rows == 0:
+                                csv_writer.writeheader()
                         
-                        # Write the row to CSV
-                        csv_writer.writerow(flat_row)
+                        if csv_writer:
+                            try:
+                                csv_writer.writerow(flat_row)
+                            except Exception as e:
+                                print(f"Error writing row: {e}")
+                                print(f"Problematic row: {flat_row}")
                         
-                        aidungeon_count += 1
+                        processed_rows += 1
                         
-                        if aidungeon_count % 1000 == 0:
-                            print(f"Processed {aidungeon_count} AIDungeon {'comments' if is_comment else 'submissions'}")
-            
+                        if processed_rows % 1000 == 0:
+                            print(f"Processed {processed_rows} AIDungeon {data_type}")
+        
             progressLog.logProgress("\n")
     
-    print(f"CSV file created: {output_file}")
-    print(f"Processed {aidungeon_count} {'comments' if is_comment else 'submissions'} from AIDungeon subreddit")
+    except Exception as e:
+        print(f"Error processing {path}: {str(e)}")
+        return
 
-def processFolder(path: str, is_comment: bool):
-    fileIterator: Iterable[str]
-    fileIterator = os.listdir(path)
-    fileIterator = (os.path.join(path, file) for file in fileIterator)
-    
-    for i, file in enumerate(fileIterator):
-        print(f"Processing file {i+1: 3} {file}")
-        processFile(file, is_comment)
+    print(f"CSV file created: {output_file}")
+    print(f"Processed {processed_rows} {data_type} from AIDungeon subreddit")
+
+def process_folder(path: str, data_type: str):
+    for file_path in glob.glob(os.path.join(path, '*.zst')):
+        process_file(file_path, data_type)
 
 def main():
-    if os.path.isdir(commentsPath):
-        processFolder(commentsPath, is_comment=True)
+    print("Processing comments...")
+    if os.path.isdir(COMMENTS_PATH):
+        process_folder(COMMENTS_PATH, 'comments')
+    elif os.path.isfile(COMMENTS_PATH):
+        process_file(COMMENTS_PATH, 'comments')
     else:
-        processFile(commentsPath, is_comment=True)
-    
-    if os.path.isdir(submissionsPath):
-        processFolder(submissionsPath, is_comment=False)
+        print(f"Error: {COMMENTS_PATH} is neither a file nor a directory")
+
+    print("\nProcessing submissions...")
+    if os.path.isdir(SUBMISSIONS_PATH):
+        process_folder(SUBMISSIONS_PATH, 'submissions')
+    elif os.path.isfile(SUBMISSIONS_PATH):
+        process_file(SUBMISSIONS_PATH, 'submissions')
     else:
-        processFile(submissionsPath, is_comment=False)
-    
+        print(f"Error: {SUBMISSIONS_PATH} is neither a file nor a directory")
+
     print("Done :>")
 
 if __name__ == "__main__":

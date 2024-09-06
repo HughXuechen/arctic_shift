@@ -13,14 +13,14 @@ from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
 # check submissions or comments
-fileOrFolderPath = '/Volumes/T7 Shield/reddit/submissions/'
+fileOrFolderPath = 'E:/reddit/submissions/'
 recursive = False
 
 def processFile(path: str):
     # Extract the month and year from the input file name
     file_name = os.path.basename(path)
     month_year = file_name.split('_')[1].split('.')[0]  # Extracts "2024-04" from "RS_2024-04.zst"
-    output_file = os.path.join("results", f"AIDungeon_submission_{month_year}.csv")
+    output_file = os.path.join("results", f"AIDungeon_submissions_{month_year}.csv")
     
     # Ensure the results directory exists
     os.makedirs("results", exist_ok=True)
@@ -40,9 +40,6 @@ def processFile(path: str):
         
         progressLog = FileProgressLog(path, f)
         
-        # Define the order of the first columns
-        first_columns = ['created-date', 'name', 'title', 'selftext', 'ups', 'upvote_ratio','author_fullname''permalink']
-        
         # Get the first row from AIDungeon subreddit to determine columns
         first_row = None
         for row in jsonStream:
@@ -54,20 +51,20 @@ def processFile(path: str):
             print("No data found for AIDungeon subreddit in the file.")
             return
         
-        # Flatten the first row and add created-date
+        # Flatten the first row and add created_date
         flat_first_row = flatten_dict(first_row)
         created_timestamp = int(flat_first_row.get('created_utc', flat_first_row.get('created', 0)))
-        created-date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
-        flat_first_row['created-date'] = created-date
+        created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
         
-        # Prepare the column order
-        columns = first_columns + [col for col in flat_first_row.keys() if col not in first_columns]
+        # Prepare the column order with created_date at the beginning
+        columns = ['created_date'] + list(flat_first_row.keys())
         
         # Initialize CSV writer with the columns
-        csv_writer = csv.DictWriter(csvfile, fieldnames=columns, extrasaction='ignore')
+        csv_writer = csv.DictWriter(csvfile, fieldnames=columns)
         csv_writer.writeheader()
         
         # Write the first row
+        flat_first_row['created_date'] = created_date
         csv_writer.writerow(flat_first_row)
         
         # Initialize counter for rows
@@ -83,11 +80,11 @@ def processFile(path: str):
                     
                     # Only process rows from the AIDungeon subreddit
                     if row.get('subreddit') == 'AIDungeon':
-                        # Flatten the row and add created-date
+                        # Flatten the row and add created_date
                         flat_row = flatten_dict(row)
                         created_timestamp = int(flat_row.get('created_utc', flat_row.get('created', 0)))
-                        created-date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
-                        flat_row['created-date'] = created-date
+                        created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
+                        flat_row['created_date'] = created_date
                         
                         # Write to CSV
                         csv_writer.writerow(flat_row)

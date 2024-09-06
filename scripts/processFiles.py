@@ -1,19 +1,20 @@
 import sys
-version = sys.version_info
-if version.major < 3 or (version.major == 3 and version.minor < 10):
-    raise RuntimeError("This script requires Python 3.10 or higher")
 import os
 from typing import Iterable
-from tqdm import tqdm
-import json
 import csv
-from datetime import datetime
+import json
+import datetime
+from tqdm import tqdm
 
 from fileStreams import getFileJsonStream
 from utils import FileProgressLog
 
-# Set the path to the comments file
-fileOrFolderPath = r"/Users/hugh/Documents/GitHub/arctic_shift/reddit/comments/RC_2024-04.zst"
+# Check Python version
+if sys.version_info < (3, 10):
+    raise RuntimeError("This script requires Python 3.10 or higher")
+
+fileOrFolderPath = 'E:/reddit/submissions/'
+recursive = False
 
 def flatten_dict(d, parent_key='', sep='_'):
     items = []
@@ -30,15 +31,13 @@ def flatten_dict(d, parent_key='', sep='_'):
 def processFile(path: str):
     print(f"Processing file {path}")
     
-    # Extract date from filename
-    filename = os.path.basename(path)
-    date_str = filename.split('_')[1].split('.')[0]
+    # Extract the month and year from the input file name
+    file_name = os.path.basename(path)
+    month_year = file_name.split('_')[1].split('.')[0]  # Extracts "2024-04" from "RS_2024-04.zst"
+    output_file = os.path.join("results", f"AIDungeon_data_{month_year}.csv")
     
-    # Create output CSV file
-    output_file = f"results/AIDungeon_comments_{date_str}.csv"
-    
-    # Define the order of important columns
-    important_columns = ["created-date", "author", "author_fullname", "body", "id", "link_id", "name", "parent_id", "permalink", "score", "ups"]
+    # Ensure the results directory exists
+    os.makedirs("results", exist_ok=True)
     
     with open(path, "rb") as f, open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         jsonStream = getFileJsonStream(path, f)
@@ -53,58 +52,67 @@ def processFile(path: str):
         
         progressLog = FileProgressLog(path, f)
         
-        # Initialize CSV writer
-        fieldnames = set()
+        fieldnames = []
         csv_writer = None
+        processed_rows = 0
 
-        # Initialize tqdm progress bar
         with tqdm(total=file_size, unit='B', unit_scale=True, desc="Processing") as pbar:
             pbar.update(f.tell())
-            aidungeon_count = 0
             for row in jsonStream:
                 progressLog.onRow()
                 pbar.update(f.tell() - pbar.n)
                 
-                # Check if the comment is from the AIDungeon subreddit
                 if row.get('subreddit') == 'AIDungeon':
-                    # Flatten the row
                     flat_row = flatten_dict(row)
                     
-                    # Convert 'created' to 'created-date'
-                    if 'created' in flat_row:
-                        created_timestamp = int(flat_row['created'])
-                        created_date = datetime.utcfromtimestamp(created_timestamp).strftime('%Y%m%d-%H%M%S')
-                        flat_row['created-date'] = created_date
+                    # Add created_date field
+                    created_timestamp = int(flat_row.get('created_utc', flat_row.get('created', 0)))
+                    created_date = datetime.datetime.fromtimestamp(created_timestamp).strftime('%Y-%m-%d-%H%M%S')
+                    flat_row['created_date'] = created_date
                     
-                    # Update fieldnames with any new fields
-                    new_fields = set(flat_row.keys()) - fieldnames
+                    new_fields = set(flat_row.keys()) - set(fieldnames)
                     if new_fields:
-                        fieldnames.update(new_fields)
-                        # Prepare the final fieldnames list with the specified order
-                        final_fieldnames = [col for col in important_columns if col in fieldnames]
-                        final_fieldnames.extend(sorted(fieldnames - set(important_columns)))
+                        fieldnames.extend(sorted(new_fields))
                         
-                        # Create a new CSV writer with updated fieldnames
-                        csv_writer = csv.DictWriter(csvfile, fieldnames=final_fieldnames)
-                        if aidungeon_count == 0:
+                        csv_writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        if processed_rows == 0:
                             csv_writer.writeheader()
                     
-                    # Write the row to CSV
                     if csv_writer:
                         csv_writer.writerow(flat_row)
                     
-                    aidungeon_count += 1
+                    processed_rows += 1
                     
-                    if aidungeon_count % 1000 == 0:
-                        print(f"Processed {aidungeon_count} AIDungeon comments")
+                    if processed_rows % 1000 == 0:
+                        print(f"Processed {processed_rows} AIDungeon records")
         
         progressLog.logProgress("\n")
     
     print(f"CSV file created: {output_file}")
-    print(f"Processed {aidungeon_count} comments from AIDungeon subreddit")
+    print(f"Processed {processed_rows} records from AIDungeon subreddit")
+
+def processFolder(path: str):
+    fileIterator: Iterable[str]
+    if recursive:
+        def recursiveFileIterator():
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    yield os.path.join(root, file)
+        fileIterator = recursiveFileIterator()
+    else:
+        fileIterator = os.listdir(path)
+        fileIterator = (os.path.join(path, file) for file in fileIterator)
+    
+    for i, file in enumerate(fileIterator):
+        print(f"Processing file {i+1: 3} {file}")
+        processFile(file)
 
 def main():
-    processFile(fileOrFolderPath)
+    if os.path.isdir(fileOrFolderPath):
+        processFolder(fileOrFolderPath)
+    else:
+        processFile(fileOrFolderPath)
+    
     print("Done :>")
 
 if __name__ == "__main__":
